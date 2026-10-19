@@ -22,14 +22,80 @@ input:disabled,
 
 /* Smart A4 printing rules: Prevent breaking a test section across pages awkwardly */
 @media print {
+  html, body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide all UI navigation, modals, and non-printable elements */
+  .no-print,
+  nav,
+  header,
+  footer,
+  aside,
+  button,
+  .no-print * {
+    display: none !important;
+  }
+
+  /* Unset fixed positioning of modals so report prints natively */
+  .fixed {
+    position: static !important;
+    overflow: visible !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: block !important;
+    height: auto !important;
+  }
+
+  .shadow-2xl, .shadow-xl, .shadow-lg, .shadow-md, .shadow-sm, .shadow-xs, .shadow {
+    box-shadow: none !important;
+  }
+
+  .border, .border-slate-200, .border-slate-300 {
+    border-color: #e2e8f0 !important;
+  }
+
+  #printable-lab-report-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    width: 100% !important;
+    max-width: 210mm !important;
+    margin: 0 auto !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
   .test-panel-print-block {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    margin-bottom: 1.5rem !important;
+    margin-bottom: 1.2rem !important;
   }
 
   .print-page-break {
     page-break-before: always !important;
     break-before: page !important;
+  }
+
+  table {
+    page-break-inside: auto !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  thead {
+    display: table-header-group !important;
   }
 }

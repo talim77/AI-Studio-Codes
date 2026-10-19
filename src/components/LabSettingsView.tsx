@@ -44,7 +44,7 @@ export const LabSettingsView: React.FC<LabSettingsViewProps> = ({ onRefreshAllDa
   };
 
   const handleExportBackup = () => {
-    const json = StorageService.exportFullBackup();
+    const json = StorageService.exportFullBackup(labProfile.uniqueLabId);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

@@ -1,6 +1,6 @@
 {
-  "summary": "Comprehensive implementation plan for the Pathology & Diagnostic Laboratory Management System (LIS) with dual authentication (Google Login + Lab ID/User ID/PIN), Owner vs Staff role-based access control, referring doctor tracking, dynamic test report generator with normal ranges and flags, patient history search, and printable A4 lab reports.",
-  "updatedAt": "2026-10-14T10:10:30.131601224Z",
+  "summary": "Revised implementation plan shifting from Resend sandbox to Google Gmail SMTP (App Password). Outlines step-by-step guidance for obtaining the 16-digit Google App Password, setting SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and updating server.ts to prioritize direct Gmail SMTP delivery to any recipient inbox with 0 domain cost.",
+  "updatedAt": "2026-10-19T09:53:52.280927615Z",
   "requestFeedback": true,
   "userFacing": true
 }

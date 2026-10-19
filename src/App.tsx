@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { StorageService } from './services/storage';
+import { FirestoreService } from './services/firestoreService';
+import { auth } from './firebase';
 import {
   PatientReport,
   ReferringDoctor,
   TestTemplate,
   StaffMember,
+  ReportStatus,
 } from './types/lab';
 
 import { Navbar } from './components/Navbar';
@@ -19,13 +22,16 @@ import { TestCatalogView } from './components/TestCatalogView';
 import { StaffManagementView } from './components/StaffManagementView';
 import { LabSettingsView } from './components/LabSettingsView';
 import { PrintableReportView } from './components/PrintableReportView';
+import { RegisterLabModal } from './components/RegisterLabModal';
+import { PublicHomeView } from './components/PublicHomeView';
 
 const MainAppContent: React.FC = () => {
-  const { currentUser, labProfile } = useAuth();
+  const { currentUser, labProfile, activeLabId, loginAsOwner, loginAsStaff } = useAuth();
 
   // Navigation State
   const [activeView, setActiveView] = useState<string>('dashboard');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
 
   // Data Store State
   const [reports, setReports] = useState<PatientReport[]>([]);
@@ -37,25 +43,76 @@ const MainAppContent: React.FC = () => {
   const [reportToPrint, setReportToPrint] = useState<PatientReport | null>(null);
   const [editingReport, setEditingReport] = useState<PatientReport | null>(null);
 
-  // Load / Reload all data from Storage
+  // Load / Reload all data for active tenant Lab from Storage
   const loadAllData = useCallback(() => {
-    setReports(StorageService.getPatientReports());
-    setDoctors(StorageService.getDoctors());
-    setTestTemplates(StorageService.getTestTemplates());
-    setStaffMembers(StorageService.getStaffMembers());
-  }, []);
+    if (!activeLabId) {
+      setReports([]);
+      setDoctors([]);
+      setTestTemplates([]);
+      setStaffMembers([]);
+      return;
+    }
+    setReports(StorageService.getPatientReports(activeLabId));
+    setDoctors(StorageService.getDoctors(activeLabId));
+    setTestTemplates(StorageService.getTestTemplates(activeLabId));
+    setStaffMembers(StorageService.getStaffMembers(activeLabId));
+  }, [activeLabId]);
 
   useEffect(() => {
     loadAllData();
-  }, [loadAllData]);
+
+    // Attach real-time cloud listeners ONLY when user is logged in AND Firebase has authenticated user
+    if (!currentUser || !auth.currentUser || !activeLabId) {
+      return;
+    }
+
+    const unsubReports = FirestoreService.subscribeReports(
+      activeLabId,
+      (liveReports) => {
+        if (liveReports && liveReports.length > 0) {
+          setReports(liveReports);
+          StorageService.savePatientReports(activeLabId, liveReports);
+        }
+      },
+      () => {}
+    );
+
+    const unsubStaff = FirestoreService.subscribeStaff(
+      activeLabId,
+      (liveStaff) => {
+        if (liveStaff && liveStaff.length > 0) {
+          setStaffMembers(liveStaff);
+          StorageService.saveStaffMembers(activeLabId, liveStaff);
+        }
+      },
+      () => {}
+    );
+
+    const unsubDoctors = FirestoreService.subscribeDoctors(
+      activeLabId,
+      (liveDocs) => {
+        if (liveDocs && liveDocs.length > 0) {
+          setDoctors(liveDocs);
+          StorageService.saveDoctors(activeLabId, liveDocs);
+        }
+      },
+      () => {}
+    );
+
+    return () => {
+      unsubReports();
+      unsubStaff();
+      unsubDoctors();
+    };
+  }, [activeLabId, currentUser, loadAllData]);
 
   // Report Save / Update Handler
   const handleSaveReport = (report: PatientReport, shouldPrint = false) => {
     const isExisting = reports.some((r) => r.id === report.id);
     if (isExisting) {
-      StorageService.updatePatientReport(report.id, report);
+      StorageService.updatePatientReport(activeLabId, report.id, report);
     } else {
-      StorageService.addPatientReport(report);
+      StorageService.addPatientReport(activeLabId, report);
     }
     loadAllData();
     setEditingReport(null);
@@ -70,60 +127,87 @@ const MainAppContent: React.FC = () => {
 
   // Report Delete Handler
   const handleDeleteReport = (reportId: string) => {
-    StorageService.deletePatientReport(reportId);
+    StorageService.deletePatientReport(activeLabId, reportId);
     loadAllData();
   };
 
   // Doctor Registration & Update Handlers
   const handleAddNewDoctor = (doc: Omit<ReferringDoctor, 'id' | 'totalReferred'>) => {
-    const created = StorageService.addDoctor(doc);
+    const created = StorageService.addDoctor(activeLabId, doc);
     loadAllData();
     return created;
   };
 
   const handleUpdateDoctor = (id: string, updates: Partial<ReferringDoctor>) => {
-    StorageService.updateDoctor(id, updates);
+    StorageService.updateDoctor(activeLabId, id, updates);
     loadAllData();
   };
 
   // Staff Management Handlers
   const handleAddStaff = (member: Omit<StaffMember, 'id' | 'createdAt'>) => {
-    StorageService.addStaffMember(member);
+    StorageService.addStaffMember(activeLabId, member);
     loadAllData();
   };
 
   const handleUpdateStaff = (id: string, updates: Partial<StaffMember>) => {
-    StorageService.updateStaffMember(id, updates);
+    StorageService.updateStaffMember(activeLabId, id, updates);
     loadAllData();
   };
 
   const handleDeleteStaff = (id: string) => {
-    StorageService.deleteStaffMember(id);
+    StorageService.deleteStaffMember(activeLabId, id);
     loadAllData();
   };
 
   // Template Pricing & Custom Catalog Handlers
   const handleUpdateTemplate = (id: string, updates: Partial<TestTemplate>) => {
-    StorageService.updateTestTemplate(id, updates);
+    StorageService.updateTestTemplate(activeLabId, id, updates);
     loadAllData();
   };
 
   const handleAddTemplate = (template: Omit<TestTemplate, 'id'>) => {
-    StorageService.addTestTemplate(template);
+    StorageService.addTestTemplate(activeLabId, template);
     loadAllData();
   };
 
   const handleDeleteTemplate = (id: string) => {
-    StorageService.deleteTestTemplate(id);
+    StorageService.deleteTestTemplate(activeLabId, id);
     loadAllData();
   };
 
   // Mark Report Delivered Handler
   const handleMarkDelivered = (reportId: string) => {
-    StorageService.updatePatientReport(reportId, { status: 'DELIVERED' });
+    StorageService.updatePatientReport(activeLabId, reportId, { status: 'DELIVERED' });
     loadAllData();
     if (reportToPrint && reportToPrint.id === reportId) {
       setReportToPrint((prev) => (prev ? { ...prev, status: 'DELIVERED' } : null));
+    }
+  };
+
+  // Update Report Status Handler (Sample Collected, Ready to Approve, Verified)
+  const handleUpdateReportStatus = (reportId: string, newStatus: ReportStatus) => {
+    if (!currentUser) return;
+    const res = StorageService.updateReportStatus(
+      activeLabId,
+      reportId,
+      newStatus,
+      { role: currentUser.role, name: currentUser.name }
+    );
+    if (!res.success) {
+      alert(res.message || 'Status update fail hua.');
+      return;
+    }
+    loadAllData();
+    if (reportToPrint && reportToPrint.id === reportId) {
+      setReportToPrint((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: newStatus,
+              verifiedBy: newStatus === 'VERIFIED' ? labProfile.pathologistName : prev.verifiedBy,
+            }
+          : null
+      );
     }
   };
 
@@ -138,6 +222,7 @@ const MainAppContent: React.FC = () => {
       {/* Top Bar */}
       <Navbar
         onOpenLogin={() => setIsLoginModalOpen(true)}
+        onOpenRegister={() => setIsRegisterModalOpen(true)}
         onNavigate={(view) => {
           if (view === 'new-report') {
             setEditingReport(null);
@@ -148,31 +233,45 @@ const MainAppContent: React.FC = () => {
       />
 
       <div className="flex-1 flex">
-        {/* Collateral Desktop Sidebar */}
-        <Sidebar
-          activeView={activeView}
-          onNavigate={(view) => {
-            if (view === 'new-report') {
-              setEditingReport(null);
-            }
-            setActiveView(view);
-          }}
-        />
+        {/* Desktop Sidebar only when logged in */}
+        {currentUser && (
+          <Sidebar
+            activeView={activeView}
+            onNavigate={(view) => {
+              if (view === 'new-report') {
+                setEditingReport(null);
+              }
+              setActiveView(view);
+            }}
+          />
+        )}
 
         {/* Main Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto overflow-y-auto">
-          {activeView === 'dashboard' && (
-            <DashboardView
-              reports={reports}
-              doctors={doctors}
-              onNavigate={(v) => {
-                if (v === 'new-report') setEditingReport(null);
-                setActiveView(v);
-              }}
+        <main
+          className={`flex-1 p-4 sm:p-6 lg:p-8 ${
+            currentUser ? 'max-w-7xl' : 'max-w-5xl'
+          } w-full mx-auto overflow-y-auto`}
+        >
+          {!currentUser ? (
+            <PublicHomeView
+              onOpenLogin={() => setIsLoginModalOpen(true)}
+              onOpenRegister={() => setIsRegisterModalOpen(true)}
               onSelectReportToPrint={(r) => setReportToPrint(r)}
-              onEditReport={handleOpenEditReport}
             />
-          )}
+          ) : (
+            <>
+              {activeView === 'dashboard' && (
+                <DashboardView
+                  reports={reports}
+                  doctors={doctors}
+                  onNavigate={(v) => {
+                    if (v === 'new-report') setEditingReport(null);
+                    setActiveView(v);
+                  }}
+                  onSelectReportToPrint={(r) => setReportToPrint(r)}
+                  onEditReport={handleOpenEditReport}
+                />
+              )}
 
           {activeView === 'reports' && (
             <ReportsHistoryView
@@ -185,6 +284,7 @@ const MainAppContent: React.FC = () => {
                 if (v === 'new-report') setEditingReport(null);
                 setActiveView(v);
               }}
+              onUpdateReportStatus={handleUpdateReportStatus}
             />
           )}
 
@@ -233,6 +333,8 @@ const MainAppContent: React.FC = () => {
           {activeView === 'settings' && (
             <LabSettingsView onRefreshAllData={loadAllData} />
           )}
+            </>
+          )}
         </main>
       </div>
 
@@ -242,6 +344,7 @@ const MainAppContent: React.FC = () => {
           report={reportToPrint}
           onClose={() => setReportToPrint(null)}
           onMarkDelivered={handleMarkDelivered}
+          onVerifyReport={(id) => handleUpdateReportStatus(id, 'VERIFIED')}
         />
       )}
 
@@ -249,6 +352,20 @@ const MainAppContent: React.FC = () => {
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
+        onOpenRegister={() => {
+          setIsLoginModalOpen(false);
+          setIsRegisterModalOpen(true);
+        }}
+      />
+
+      {/* Register New Lab Modal */}
+      <RegisterLabModal
+        isOpen={isRegisterModalOpen}
+        onClose={() => setIsRegisterModalOpen(false)}
+        onSuccess={() => {
+          setIsRegisterModalOpen(false);
+          loadAllData();
+        }}
       />
     </div>
   );

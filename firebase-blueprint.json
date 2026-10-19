@@ -1,0 +1,437 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "System administrator and master lab supervisors",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Email address of the administrator",
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "description": "Role identifier",
+          "enum": ["admin", "superadmin"]
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp ISO string",
+          "maxLength": 64
+        }
+      },
+      "required": ["email", "role"]
+    },
+    "Lab": {
+      "title": "Lab",
+      "description": "Laboratory organization tenant entity",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique lab document identifier",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uniqueLabId": {
+          "type": "string",
+          "description": "Lab Unique identifier (e.g., LARI786, APEX-LAB-101)",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerName": {
+          "type": "string",
+          "description": "Full name of the laboratory owner/director",
+          "maxLength": 128
+        },
+        "ownerEmail": {
+          "type": "string",
+          "description": "Email address of the laboratory owner",
+          "maxLength": 128
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "Firebase Authentication UID of the owner",
+          "maxLength": 128
+        },
+        "phone": {
+          "type": "string",
+          "description": "Primary phone contact for the lab",
+          "maxLength": 32
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Registration date ISO string",
+          "maxLength": 64
+        },
+        "profile": {
+          "type": "object",
+          "description": "Detailed clinic profile and accreditation details"
+        }
+      },
+      "required": ["uniqueLabId", "ownerName", "ownerEmail", "ownerUid"]
+    },
+    "Staff": {
+      "title": "Staff",
+      "description": "Laboratory staff member or technician",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Staff document ID",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "labId": {
+          "type": "string",
+          "description": "Parent lab unique identifier",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "staffUserId": {
+          "type": "string",
+          "description": "Unique employee alphanumeric ID (e.g., AFTB03, TECH-01)",
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Staff member full name",
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "description": "Staff access role",
+          "enum": ["owner", "staff"]
+        },
+        "pin": {
+          "type": "string",
+          "description": "4-digit security PIN for terminal login",
+          "maxLength": 4,
+          "minLength": 4,
+          "pattern": "^[0-9]{4}$"
+        },
+        "isPinCustomized": {
+          "type": "boolean",
+          "description": "Whether the staff has changed their initial owner-provided PIN"
+        },
+        "pinUpdatedAt": {
+          "type": "string",
+          "description": "Timestamp when PIN was last changed by staff",
+          "maxLength": 64
+        },
+        "designation": {
+          "type": "string",
+          "description": "Staff designation (e.g., Medical Lab Technician)",
+          "maxLength": 128
+        },
+        "phone": {
+          "type": "string",
+          "description": "Contact phone number",
+          "maxLength": 32
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Active employment status flag"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Account creation timestamp",
+          "maxLength": 64
+        },
+        "permissions": {
+          "type": "object",
+          "description": "Granular staff capability permissions"
+        }
+      },
+      "required": ["labId", "staffUserId", "name", "role", "pin", "isActive"]
+    },
+    "Doctor": {
+      "title": "Doctor",
+      "description": "Referring doctor directory entry",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Doctor record ID",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "labId": {
+          "type": "string",
+          "description": "Parent lab identifier",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Doctor full name and title",
+          "maxLength": 128
+        },
+        "qualification": {
+          "type": "string",
+          "description": "Medical degree and qualifications",
+          "maxLength": 128
+        },
+        "clinicHospital": {
+          "type": "string",
+          "description": "Associated clinic or hospital name",
+          "maxLength": 128
+        },
+        "phone": {
+          "type": "string",
+          "description": "Contact phone number",
+          "maxLength": 32
+        },
+        "specialty": {
+          "type": "string",
+          "description": "Medical specialty",
+          "maxLength": 64
+        },
+        "commissionRate": {
+          "type": "number",
+          "description": "Referral incentive percentage"
+        },
+        "totalReferred": {
+          "type": "number",
+          "description": "Total referred patients count"
+        }
+      },
+      "required": ["labId", "name"]
+    },
+    "TestTemplate": {
+      "title": "TestTemplate",
+      "description": "Diagnostic test catalog definition",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Test template identifier",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "labId": {
+          "type": "string",
+          "description": "Parent lab identifier",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Test panel name (e.g., Complete Blood Count)",
+          "maxLength": 128
+        },
+        "category": {
+          "type": "string",
+          "description": "Clinical category",
+          "maxLength": 64
+        },
+        "code": {
+          "type": "string",
+          "description": "Short code or test abbreviation",
+          "maxLength": 32
+        },
+        "sampleType": {
+          "type": "string",
+          "description": "Biological specimen required",
+          "maxLength": 64
+        },
+        "turnaroundTime": {
+          "type": "string",
+          "description": "Expected turnaround duration",
+          "maxLength": 64
+        },
+        "price": {
+          "type": "number",
+          "description": "Standard retail test fee in INR"
+        },
+        "parameters": {
+          "type": "array",
+          "description": "List of test parameters with clinical reference ranges"
+        }
+      },
+      "required": ["labId", "name", "price"]
+    },
+    "PatientReport": {
+      "title": "PatientReport",
+      "description": "Patient diagnostic test report record with financial billing and clinical status",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Report document identifier",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "labId": {
+          "type": "string",
+          "description": "Parent lab unique identifier",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reportNo": {
+          "type": "string",
+          "description": "Clinical report sequence number (e.g., REP-2026-0101)",
+          "maxLength": 64
+        },
+        "tokenNo": {
+          "type": "number",
+          "description": "Sequential queue token number"
+        },
+        "patientName": {
+          "type": "string",
+          "description": "Patient full legal name",
+          "maxLength": 128
+        },
+        "age": {
+          "type": "number",
+          "description": "Patient age in years"
+        },
+        "gender": {
+          "type": "string",
+          "description": "Biological gender",
+          "enum": ["Male", "Female", "Other"]
+        },
+        "phone": {
+          "type": "string",
+          "description": "Patient mobile contact",
+          "maxLength": 32
+        },
+        "email": {
+          "type": "string",
+          "description": "Patient email for report delivery",
+          "maxLength": 128
+        },
+        "address": {
+          "type": "string",
+          "description": "Residential address",
+          "maxLength": 256
+        },
+        "uhid": {
+          "type": "string",
+          "description": "Unique Health ID if available",
+          "maxLength": 64
+        },
+        "referringDoctorId": {
+          "type": "string",
+          "description": "ID of referring doctor",
+          "maxLength": 128
+        },
+        "referringDoctorName": {
+          "type": "string",
+          "description": "Name of referring doctor",
+          "maxLength": 128
+        },
+        "tests": {
+          "type": "array",
+          "description": "Array of test panels and observed parameters"
+        },
+        "status": {
+          "type": "string",
+          "description": "Multi-stage clinical lifecycle status",
+          "enum": ["SAMPLE_COLLECTED", "READY_TO_APPROVE", "VERIFIED", "DELIVERED"]
+        },
+        "discountAmount": {
+          "type": "number",
+          "description": "Discount granted on total test bill in INR"
+        },
+        "discountApprovedBy": {
+          "type": "string",
+          "description": "Designation or doctor who authorized the discount",
+          "maxLength": 128
+        },
+        "netPayable": {
+          "type": "number",
+          "description": "Final payable amount after discount"
+        },
+        "amountPaid": {
+          "type": "number",
+          "description": "Amount collected from patient at intake"
+        },
+        "dueAmount": {
+          "type": "number",
+          "description": "Remaining receivable balance"
+        },
+        "paymentStatus": {
+          "type": "string",
+          "description": "Billing settlement status",
+          "enum": ["PAID", "PARTIAL", "DUE"]
+        },
+        "collectedAt": {
+          "type": "string",
+          "description": "Sample collection timestamp",
+          "maxLength": 64
+        },
+        "reportedAt": {
+          "type": "string",
+          "description": "Report completion timestamp",
+          "maxLength": 64
+        },
+        "verifiedBy": {
+          "type": "string",
+          "description": "Name of Chief Pathologist who verified the report",
+          "maxLength": 128
+        },
+        "verifiedAt": {
+          "type": "string",
+          "description": "Timestamp when report was verified by lab owner",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Record creation timestamp ISO string",
+          "maxLength": 64
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Record update timestamp ISO string",
+          "maxLength": 64
+        }
+      },
+      "required": ["labId", "reportNo", "patientName", "status", "netPayable", "paymentStatus"]
+    },
+    "ConnectionTest": {
+      "title": "ConnectionTest",
+      "description": "Diagnostic heartbeat test document",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "type": "string",
+          "description": "Server ping timestamp",
+          "maxLength": 64
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "System administrator directory for super-admin privileges"
+    },
+    "/labs/{labId}": {
+      "schema": { "$ref": "#/entities/Lab" },
+      "description": "Registered Pathology Labs multi-tenant registry"
+    },
+    "/labs/{labId}/staff/{staffId}": {
+      "schema": { "$ref": "#/entities/Staff" },
+      "description": "Staff roster and PIN security credentials per lab"
+    },
+    "/labs/{labId}/doctors/{doctorId}": {
+      "schema": { "$ref": "#/entities/Doctor" },
+      "description": "Referring doctors directory per lab"
+    },
+    "/labs/{labId}/templates/{templateId}": {
+      "schema": { "$ref": "#/entities/TestTemplate" },
+      "description": "Customizable diagnostic test catalog per lab"
+    },
+    "/labs/{labId}/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/PatientReport" },
+      "description": "Diagnostic patient reports with billing, discounts, and clinical verification"
+    },
+    "/test/{testId}": {
+      "schema": { "$ref": "#/entities/ConnectionTest" },
+      "description": "Connection test heartbeat"
+    }
+  }
+}

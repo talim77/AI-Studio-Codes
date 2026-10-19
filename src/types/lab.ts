@@ -24,21 +24,34 @@ export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
   canEditLabProfile: false,
 };
 
+export interface LabAccount {
+  id: string;
+  uniqueLabId: string; // e.g. "LARI786"
+  ownerName: string;
+  ownerEmail: string;
+  passwordHash: string; // stored credentials
+  phone: string;
+  isEmailVerified: boolean;
+  createdAt: string;
+  ownerUid?: string;
+  profile: LabProfile;
+}
+
 export interface UserSession {
   id: string;
   name: string;
   email?: string;
   role: Role;
-  labId: string;
+  labId: string; // The tenant's uniqueLabId
   staffUserId?: string;
   designation?: string;
-  loginType: 'google' | 'pin';
+  loginType: 'password' | 'pin';
   permissions: StaffPermissions;
 }
 
 export interface LabProfile {
   id: string;
-  uniqueLabId: string; // e.g. "APEX-LAB-101" or "LARI786"
+  uniqueLabId: string; // e.g. "LARI786"
   name: string;
   tagline: string;
   address: string;
@@ -55,7 +68,7 @@ export interface LabProfile {
 export interface StaffMember {
   id: string;
   labId: string;
-  staffUserId: string; // e.g. "TECH-01" or "AFTB03"
+  staffUserId: string; // e.g. "AFTB03" or "TECH-01"
   name: string;
   role: Role;
   pin: string; // 4-digit PIN
@@ -64,6 +77,8 @@ export interface StaffMember {
   isActive: boolean;
   createdAt: string;
   permissions: StaffPermissions;
+  isPinCustomized?: boolean; // True when staff updates their own secret PIN
+  pinUpdatedAt?: string;
 }
 
 export interface ReferringDoctor {
@@ -75,7 +90,7 @@ export interface ReferringDoctor {
   phone: string;
   email?: string;
   specialty: string;
-  commissionRate: number; // percentage (e.g. 15 for 15%), editable by Owner / authorized staff
+  commissionRate: number; // percentage (e.g. 15 for 15%)
   totalReferred: number;
 }
 
@@ -92,6 +107,7 @@ export interface TestParameterDefinition {
 
 export interface TestTemplate {
   id: string;
+  labId?: string; // Tenant specific
   code: string;
   name: string;
   category: string;
@@ -99,7 +115,7 @@ export interface TestTemplate {
   turnaroundHours: number;
   sampleType: string;
   parameters: TestParameterDefinition[];
-  isPackage?: boolean; // Profile/Package like "Surgical Profile" or "Fever Panel"
+  isPackage?: boolean;
   bundledTemplateIds?: string[];
 }
 
@@ -120,11 +136,19 @@ export interface TestGroupResult {
   parameters: ParameterResult[];
 }
 
+export type ReportStatus =
+  | 'SAMPLE_COLLECTED'
+  | 'READY_TO_APPROVE'
+  | 'VERIFIED'
+  | 'DELIVERED'
+  | 'PENDING'
+  | 'COMPLETED';
+
 export interface PatientReport {
   id: string;
   reportNo: string; // e.g. "REP-2026-0104"
   tokenNo: number;
-  labId: string;
+  labId: string; // Tenant ID
   patientName: string;
   age: number;
   gender: 'Male' | 'Female' | 'Other';
@@ -134,20 +158,37 @@ export interface PatientReport {
   reportedAt: string;
   referringDoctorId: string;
   referringDoctorName: string;
-  referringDoctorCommissionRate?: number; // snapshot of rate at time of test
-  testTemplateId: string; // comma separated or primary
-  testTemplateIds?: string[]; // array of selected template IDs
-  testName: string; // e.g. "Complete Blood Count (CBC), Blood Sugar, Urine R/M"
+  referringDoctorCommissionRate?: number;
+  testTemplateId: string;
+  testTemplateIds?: string[];
+  testName: string;
   testCategory: string;
-  testPrice: number; // total bill
-  testGroups: TestGroupResult[]; // structured groups for multi-test input and smart A4 pagination
-  parameters: ParameterResult[]; // flat list for backwards compatibility
-  clinicalImpression: string;
-  status: 'PENDING' | 'COMPLETED' | 'DELIVERED';
+  testPrice: number; // Gross total test billing
+  discountAmount?: number; // Discount given
+  discountApprovedBy?: string; // Discount authorized by (Doctor, Owner, Welfare)
+  netPayable?: number; // testPrice - discountAmount
   paymentStatus: 'PAID' | 'PARTIAL' | 'UNPAID';
   amountPaid: number;
+  dueAmount?: number; // netPayable - amountPaid
+  testGroups: TestGroupResult[];
+  parameters: ParameterResult[];
+  clinicalImpression: string;
+  status: ReportStatus;
+  verifiedBy?: string; // Chief Pathologist who verified
+  verifiedAt?: string; // Timestamp of verification
   createdByStaffId: string;
   createdByName: string;
   createdAt: string;
   updatedAt: string;
 }
+
+export type PrintPaperMode = 'letterhead' | 'preprinted';
+
+export interface PrintSettings {
+  paperMode: PrintPaperMode; // 'letterhead' (full) or 'preprinted' (doctor stationery)
+  topMarginMm: number; // default 50mm, adjustable (20-90mm)
+  leftMarginMm: number; // default 12mm, adjustable (5-30mm)
+  rightMarginMm: number; // default 12mm, adjustable (5-30mm)
+  bottomMarginMm: number; // default 15mm
+}
+

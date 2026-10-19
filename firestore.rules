@@ -1,0 +1,150 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email == 'talim10725@gmail.com' && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isLabOwner(labId) {
+      return isSignedIn() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/labs/$(labId)) &&
+         get(/databases/$(database)/documents/labs/$(labId)).data.ownerUid == request.auth.uid)
+      );
+    }
+
+    function isLabMember(labId) {
+      return isSignedIn() && (
+        isLabOwner(labId) ||
+        exists(/databases/$(database)/documents/labs/$(labId)/staff/$(request.auth.uid))
+      );
+    }
+
+    function isValidLab(data) {
+      return data.keys().hasAll(['uniqueLabId', 'ownerName', 'ownerEmail', 'ownerUid']) &&
+        data.uniqueLabId is string && data.uniqueLabId.size() > 0 && data.uniqueLabId.size() <= 64 &&
+        data.ownerName is string && data.ownerName.size() > 0 && data.ownerName.size() <= 128 &&
+        data.ownerEmail is string && data.ownerEmail.size() > 0 && data.ownerEmail.size() <= 128 &&
+        data.ownerUid is string && data.ownerUid.size() > 0 && data.ownerUid.size() <= 128;
+    }
+
+    function isValidStaff(data) {
+      return data.keys().hasAll(['labId', 'staffUserId', 'name', 'role', 'pin', 'isActive']) &&
+        data.labId is string && data.labId.size() > 0 && data.labId.size() <= 64 &&
+        data.staffUserId is string && data.staffUserId.size() > 0 && data.staffUserId.size() <= 32 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 128 &&
+        data.role in ['owner', 'staff'] &&
+        data.pin is string && data.pin.size() == 4 && data.pin.matches('^[0-9]{4}$') &&
+        data.isActive is bool;
+    }
+
+    function isValidDoctor(data) {
+      return data.keys().hasAll(['labId', 'name']) &&
+        data.labId is string && data.labId.size() > 0 && data.labId.size() <= 64 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 128;
+    }
+
+    function isValidTemplate(data) {
+      return data.keys().hasAll(['labId', 'name', 'price']) &&
+        data.labId is string && data.labId.size() > 0 && data.labId.size() <= 64 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 128 &&
+        data.price is number && data.price >= 0;
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['labId', 'reportNo', 'patientName', 'status', 'netPayable', 'paymentStatus']) &&
+        data.labId is string && data.labId.size() > 0 && data.labId.size() <= 64 &&
+        data.reportNo is string && data.reportNo.size() > 0 && data.reportNo.size() <= 64 &&
+        data.patientName is string && data.patientName.size() > 0 && data.patientName.size() <= 128 &&
+        data.status in ['SAMPLE_COLLECTED', 'READY_TO_APPROVE', 'VERIFIED', 'DELIVERED'] &&
+        data.paymentStatus in ['PAID', 'PARTIAL', 'DUE'] &&
+        data.netPayable is number && data.netPayable >= 0 &&
+        (!('tests' in data) || (data.tests is list && data.tests.size() <= 50));
+    }
+
+    // Health check / connection test collection
+    match /test/{testId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Admins collection
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Labs collection
+    match /labs/{labId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(labId) && isValidLab(incoming()) && incoming().ownerUid == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(labId) && isValidLab(incoming()) && (isLabOwner(labId) || isAdmin());
+      allow delete: if isAdmin();
+
+      // Staff subcollection
+      match /staff/{staffId} {
+        allow read: if isSignedIn() && isValidId(labId) && (isLabMember(labId) || isAdmin());
+        allow create: if isSignedIn() && isValidId(labId) && isValidId(staffId) && (isLabOwner(labId) || isAdmin()) && isValidStaff(incoming());
+        allow update: if isSignedIn() && isValidId(labId) && isValidId(staffId) && isValidStaff(incoming()) && (
+          (isLabOwner(labId) || isAdmin()) ||
+          (
+            (request.auth.uid == staffId || (existing().staffUserId is string && incoming().staffUserId == existing().staffUserId)) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['pin', 'isPinCustomized', 'pinUpdatedAt'])
+          )
+        );
+        allow delete: if isSignedIn() && isValidId(labId) && isValidId(staffId) && (isLabOwner(labId) || isAdmin());
+      }
+
+      // Doctors subcollection
+      match /doctors/{doctorId} {
+        allow read: if isSignedIn() && isValidId(labId) && (isLabMember(labId) || isAdmin());
+        allow create: if isSignedIn() && isValidId(labId) && isValidId(doctorId) && (isLabOwner(labId) || isAdmin()) && isValidDoctor(incoming());
+        allow update: if isSignedIn() && isValidId(labId) && isValidId(doctorId) && (isLabOwner(labId) || isAdmin()) && isValidDoctor(incoming());
+        allow delete: if isSignedIn() && isValidId(labId) && isValidId(doctorId) && (isLabOwner(labId) || isAdmin());
+      }
+
+      // Test templates subcollection
+      match /templates/{templateId} {
+        allow read: if isSignedIn() && isValidId(labId) && (isLabMember(labId) || isAdmin());
+        allow create: if isSignedIn() && isValidId(labId) && isValidId(templateId) && (isLabOwner(labId) || isAdmin()) && isValidTemplate(incoming());
+        allow update: if isSignedIn() && isValidId(labId) && isValidId(templateId) && (isLabOwner(labId) || isAdmin()) && isValidTemplate(incoming());
+        allow delete: if isSignedIn() && isValidId(labId) && isValidId(templateId) && (isLabOwner(labId) || isAdmin());
+      }
+
+      // Patient reports subcollection
+      match /reports/{reportId} {
+        allow read: if isSignedIn() && isValidId(labId) && (isLabMember(labId) || isAdmin());
+        allow create: if isSignedIn() && isValidId(labId) && isValidId(reportId) && isLabMember(labId) && isValidReport(incoming());
+        allow update: if isSignedIn() && isValidId(labId) && isValidId(reportId) && isLabMember(labId) && isValidReport(incoming()) && (
+          (isLabOwner(labId) || isAdmin()) ||
+          (!incoming().diff(existing()).affectedKeys().hasAny(['verifiedBy', 'verifiedAt']) && incoming().status != 'VERIFIED')
+        );
+        allow delete: if isSignedIn() && isValidId(labId) && isValidId(reportId) && (isLabOwner(labId) || isAdmin());
+      }
+    }
+  }
+}

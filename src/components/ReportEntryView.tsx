@@ -86,15 +86,41 @@ export const ReportEntryView: React.FC<ReportEntryViewProps> = ({
     initialReport?.clinicalImpression || ''
   );
 
-  // Financial & Status
-  const [status, setStatus] = useState<'PENDING' | 'COMPLETED' | 'DELIVERED'>(
-    initialReport?.status || 'COMPLETED'
-  );
+  // Financial & Discount State
   const [totalPrice, setTotalPrice] = useState<number>(initialReport?.testPrice || 350);
-  const [amountPaid, setAmountPaid] = useState<number>(initialReport?.amountPaid || 350);
+  const [discountAmount, setDiscountAmount] = useState<number>(initialReport?.discountAmount || 0);
+  const [discountApprovedBy, setDiscountApprovedBy] = useState<string>(
+    initialReport?.discountApprovedBy || ''
+  );
+  const [amountPaid, setAmountPaid] = useState<number>(initialReport?.amountPaid ?? 350);
   const [paymentStatus, setPaymentStatus] = useState<'PAID' | 'PARTIAL' | 'UNPAID'>(
     initialReport?.paymentStatus || 'PAID'
   );
+
+  // Status Progression
+  const [status, setStatus] = useState<
+    'SAMPLE_COLLECTED' | 'READY_TO_APPROVE' | 'VERIFIED' | 'DELIVERED'
+  >(() => {
+    if (initialReport?.status === 'VERIFIED' || initialReport?.status === 'COMPLETED') {
+      return 'VERIFIED';
+    }
+    if (initialReport?.status === 'DELIVERED') {
+      return 'DELIVERED';
+    }
+    if (initialReport?.status === 'SAMPLE_COLLECTED') {
+      return 'SAMPLE_COLLECTED';
+    }
+    return 'READY_TO_APPROVE';
+  });
+
+  // Financial calculations
+  const grossTotal = Number(totalPrice) || 0;
+  const discount = Math.min(grossTotal, Math.max(0, Number(discountAmount) || 0));
+  const netPayable = grossTotal - discount;
+  const paid = Math.min(netPayable, Math.max(0, Number(amountPaid) || 0));
+  const dueAmount = netPayable - paid;
+  const selectedDoctor = doctors.find((d) => d.id === selectedDoctorId);
+
 
   // Synchronize test groups whenever selected templates, gender, or age change
   useEffect(() => {
@@ -157,7 +183,10 @@ export const ReportEntryView: React.FC<ReportEntryViewProps> = ({
 
     setTestGroups(newGroups);
     setTotalPrice(calculatedTotal);
-    setAmountPaid(calculatedTotal);
+    if (!initialReport) {
+      const net = Math.max(0, calculatedTotal - discountAmount);
+      setAmountPaid(net);
+    }
   }, [selectedTemplateIds, gender, age, testTemplates]);
 
   // Toggle test template selection
@@ -237,7 +266,7 @@ export const ReportEntryView: React.FC<ReportEntryViewProps> = ({
     }
 
     const doctor = doctors.find((d) => d.id === selectedDoctorId);
-    const nextNums = StorageService.getNextReportNumber();
+    const nextNums = StorageService.getNextReportNumber(labProfile.uniqueLabId);
     const now = new Date();
     const formattedDate = `${now.toISOString().split('T')[0]} ${now.toLocaleTimeString([], {
       hour: '2-digit',
@@ -263,7 +292,12 @@ export const ReportEntryView: React.FC<ReportEntryViewProps> = ({
       phone: phone.trim() || 'N/A',
       address: address.trim() || 'Local',
       sampleCollectedAt: initialReport?.sampleCollectedAt || formattedDate,
-      reportedAt: status === 'COMPLETED' ? formattedDate : '-',
+      reportedAt:
+        status === 'VERIFIED' || status === 'DELIVERED'
+          ? initialReport?.reportedAt && initialReport.reportedAt !== '-'
+            ? initialReport.reportedAt
+            : formattedDate
+          : '-',
       referringDoctorId: doctor?.id || 'doc-self',
       referringDoctorName: doctor?.name || 'Self / Direct Walk-In',
       referringDoctorCommissionRate: doctor?.commissionRate ?? 15,
@@ -271,13 +305,25 @@ export const ReportEntryView: React.FC<ReportEntryViewProps> = ({
       testTemplateIds: selectedTemplateIds,
       testName: combinedTestName,
       testCategory: combinedCategory,
-      testPrice: Number(totalPrice) || 0,
+      testPrice: grossTotal,
+      discountAmount: discount,
+      discountApprovedBy: discount > 0 ? (discountApprovedBy.trim() || 'Lab Owner') : undefined,
+      netPayable,
+      paymentStatus: dueAmount === 0 ? 'PAID' : paid > 0 ? 'PARTIAL' : 'UNPAID',
+      amountPaid: paid,
+      dueAmount,
       testGroups,
       parameters: allFlatParams,
       clinicalImpression: clinicalImpression.trim() || 'Findings to be correlated clinically.',
       status,
-      paymentStatus,
-      amountPaid: Number(amountPaid) || 0,
+      verifiedBy:
+        status === 'VERIFIED' || status === 'DELIVERED'
+          ? initialReport?.verifiedBy || labProfile.pathologistName
+          : undefined,
+      verifiedAt:
+        status === 'VERIFIED' || status === 'DELIVERED'
+          ? initialReport?.verifiedAt || formattedDate
+          : undefined,
       createdByStaffId: currentUser?.staffUserId || 'OWNER-01',
       createdByName: currentUser?.name || 'Staff User',
       createdAt: initialReport?.createdAt || new Date().toISOString(),
@@ -623,47 +669,278 @@ export const ReportEntryView: React.FC<ReportEntryViewProps> = ({
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-100 text-xs">
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">
-              Total Tests Bill Amount (₹)
-            </label>
-            <input
-              type="number"
-              value={totalPrice}
-              onChange={(e) => setTotalPrice(Number(e.target.value))}
-              className="w-full px-3 py-2 text-sm font-mono font-bold border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500"
-            />
+        {/* Financial & Discount Ledger */}
+        <div className="pt-4 border-t border-slate-200 space-y-4">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold text-slate-900 font-heading uppercase tracking-wider flex items-center gap-1.5">
+              <span>Patient Billing & Payment Ledger</span>
+            </h4>
+            <span className="text-[11px] text-slate-500">
+              Net Payable: <strong className="text-cyan-800 font-mono text-xs">₹{netPayable}</strong>
+            </span>
           </div>
 
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">
-              Payment Status
-            </label>
-            <select
-              value={paymentStatus}
-              onChange={(e) => setPaymentStatus(e.target.value as any)}
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 bg-white cursor-pointer"
-            >
-              <option value="PAID">Paid in Full</option>
-              <option value="PARTIAL">Partial Payment</option>
-              <option value="UNPAID">Pending / Due</option>
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            {/* 1. Gross Bill Amount */}
+            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                Gross Total Tests Bill (₹)
+              </label>
+              <input
+                type="number"
+                value={totalPrice}
+                onChange={(e) => {
+                  const val = Math.max(0, Number(e.target.value));
+                  setTotalPrice(val);
+                  setAmountPaid(Math.max(0, val - discount));
+                }}
+                className="w-full px-2.5 py-1.5 text-sm font-mono font-bold border border-slate-300 rounded-md bg-white focus:ring-2 focus:ring-cyan-500"
+              />
+            </div>
+
+            {/* 2. Discount Amount */}
+            <div className="bg-amber-50/60 p-2.5 rounded-lg border border-amber-200">
+              <label className="block text-[11px] font-semibold text-amber-900 mb-1">
+                Discount Given (₹)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={grossTotal}
+                value={discountAmount}
+                onChange={(e) => {
+                  const val = Math.max(0, Number(e.target.value));
+                  setDiscountAmount(val);
+                  const newNet = Math.max(0, grossTotal - val);
+                  setAmountPaid(newNet);
+                }}
+                className="w-full px-2.5 py-1.5 text-sm font-mono font-bold border border-amber-300 rounded-md bg-white text-amber-900 focus:ring-2 focus:ring-amber-500"
+                placeholder="0"
+              />
+            </div>
+
+            {/* 3. Discount Approved By */}
+            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                Discount Approved By
+              </label>
+              <input
+                type="text"
+                list="discount-approver-options"
+                value={discountApprovedBy}
+                onChange={(e) => setDiscountApprovedBy(e.target.value)}
+                placeholder={selectedDoctor?.name ? `e.g. ${selectedDoctor.name}` : 'e.g. Lab Owner / Referring Doctor'}
+                className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-md bg-white focus:ring-2 focus:ring-cyan-500"
+              />
+              <datalist id="discount-approver-options">
+                <option value={selectedDoctor?.name ? `${selectedDoctor.name} (Referring Doctor)` : 'Referring Doctor'} />
+                <option value="Lab Owner / Chief Pathologist" />
+                <option value="Senior Citizen Welfare Concession" />
+                <option value="Emergency / BPL Concession" />
+                <option value="Management Discretion" />
+              </datalist>
+            </div>
+
+            {/* 4. Net Payable Calculation */}
+            <div className="bg-cyan-50/80 p-2.5 rounded-lg border border-cyan-200 flex flex-col justify-between">
+              <span className="block text-[11px] font-semibold text-cyan-900">
+                Net Payable Amount
+              </span>
+              <span className="font-mono text-lg font-extrabold text-cyan-950">
+                ₹{netPayable}
+              </span>
+              <span className="text-[10px] text-cyan-700">
+                (Gross ₹{grossTotal} − Discount ₹{discount})
+              </span>
+            </div>
           </div>
 
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">
-              Investigation Report Status
-            </label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as any)}
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 bg-white cursor-pointer"
+          {/* Payment Status, Amount Paid & Due Balance */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                Amount Received / Paid (₹) *
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={netPayable}
+                value={amountPaid}
+                onChange={(e) => {
+                  const val = Math.max(0, Number(e.target.value));
+                  setAmountPaid(val);
+                  if (val >= netPayable) {
+                    setPaymentStatus('PAID');
+                  } else if (val > 0) {
+                    setPaymentStatus('PARTIAL');
+                  } else {
+                    setPaymentStatus('UNPAID');
+                  }
+                }}
+                className="w-full px-2.5 py-1.5 text-sm font-mono font-bold border border-slate-300 rounded-md bg-white focus:ring-2 focus:ring-cyan-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                Payment Status
+              </label>
+              <select
+                value={paymentStatus}
+                onChange={(e) => {
+                  const newStatus = e.target.value as 'PAID' | 'PARTIAL' | 'UNPAID';
+                  setPaymentStatus(newStatus);
+                  if (newStatus === 'PAID') {
+                    setAmountPaid(netPayable);
+                  } else if (newStatus === 'UNPAID') {
+                    setAmountPaid(0);
+                  }
+                }}
+                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-md bg-white focus:ring-2 focus:ring-cyan-500 cursor-pointer"
+              >
+                <option value="PAID">Full Payment Done (PAID)</option>
+                <option value="PARTIAL">Partial Payment (PARTIAL)</option>
+                <option value="UNPAID">Pending / Due (UNPAID)</option>
+              </select>
+            </div>
+
+            <div
+              className={`p-2 rounded-md border flex items-center justify-between ${
+                dueAmount > 0
+                  ? 'bg-amber-50 border-amber-300 text-amber-900'
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              }`}
             >
-              <option value="COMPLETED">Completed (Verified & Ready)</option>
-              <option value="PENDING">Pending (Sample in Lab)</option>
-              <option value="DELIVERED">Delivered to Patient</option>
-            </select>
+              <div>
+                <span className="block text-[10px] uppercase font-bold tracking-wider">
+                  {dueAmount > 0 ? 'Remaining Balance Due:' : 'Balance Cleared:'}
+                </span>
+                <span className="font-mono text-base font-extrabold">
+                  ₹{dueAmount}
+                </span>
+              </div>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                  dueAmount > 0 ? 'bg-amber-200 text-amber-900' : 'bg-emerald-200 text-emerald-900'
+                }`}
+              >
+                {dueAmount > 0 ? 'DUE PENDING' : 'NO DUES'}
+              </span>
+            </div>
+          </div>
+
+          {/* Investigation Report Status & Approval Workflow */}
+          <div className="p-3.5 bg-slate-900 text-white rounded-lg space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold font-heading text-cyan-300 uppercase tracking-wider">
+                Investigation Report Status Workflow
+              </label>
+              {currentUser?.role !== 'owner' && (
+                <span className="text-[10px] text-amber-300 bg-amber-900/50 border border-amber-700/60 px-2 py-0.5 rounded">
+                  Note: "VERIFIED" status sirf Lab Owner / Chief Pathologist dwara authorize hota hai
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <label
+                className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors ${
+                  status === 'SAMPLE_COLLECTED'
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-200 font-bold'
+                    : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="report-status-radio"
+                  value="SAMPLE_COLLECTED"
+                  checked={status === 'SAMPLE_COLLECTED'}
+                  onChange={() => setStatus('SAMPLE_COLLECTED')}
+                  className="accent-amber-400 cursor-pointer"
+                />
+                <span>1. Sample Collected</span>
+              </label>
+
+              <label
+                className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors ${
+                  status === 'READY_TO_APPROVE'
+                    ? 'bg-purple-500/20 border-purple-400 text-purple-200 font-bold'
+                    : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="report-status-radio"
+                  value="READY_TO_APPROVE"
+                  checked={status === 'READY_TO_APPROVE'}
+                  onChange={() => setStatus('READY_TO_APPROVE')}
+                  className="accent-purple-400 cursor-pointer"
+                />
+                <span>2. Ready to Approve</span>
+              </label>
+
+              {/* Owner-Exclusive: VERIFIED */}
+              <label
+                className={`flex items-center gap-2 p-2 rounded border transition-colors ${
+                  currentUser?.role === 'owner'
+                    ? 'cursor-pointer'
+                    : 'opacity-50 cursor-not-allowed'
+                } ${
+                  status === 'VERIFIED'
+                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300 font-bold'
+                    : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                }`}
+                title={
+                  currentUser?.role === 'owner'
+                    ? 'Mark verified as Chief Pathologist'
+                    : 'Sirf Lab Owner / Chief Pathologist hi report ko Verified mark kar sakte hain'
+                }
+              >
+                <input
+                  type="radio"
+                  name="report-status-radio"
+                  value="VERIFIED"
+                  disabled={currentUser?.role !== 'owner' && status !== 'VERIFIED'}
+                  checked={status === 'VERIFIED'}
+                  onChange={() => {
+                    if (currentUser?.role === 'owner') {
+                      setStatus('VERIFIED');
+                    } else {
+                      alert('Sirf Lab Owner / Chief Pathologist hi report ko VERIFIED mark kar sakte hain.');
+                    }
+                  }}
+                  className="accent-emerald-400 cursor-pointer"
+                />
+                <span className="flex items-center gap-1">
+                  <span>3. Verified</span>
+                  {currentUser?.role === 'owner' ? (
+                    <span className="text-[9px] bg-emerald-900 text-emerald-300 px-1 rounded font-normal">
+                      Owner
+                    </span>
+                  ) : (
+                    <span className="text-[9px] text-slate-400">🔒</span>
+                  )}
+                </span>
+              </label>
+
+              <label
+                className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors ${
+                  status === 'DELIVERED'
+                    ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 font-bold'
+                    : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="report-status-radio"
+                  value="DELIVERED"
+                  checked={status === 'DELIVERED'}
+                  onChange={() => setStatus('DELIVERED')}
+                  className="accent-cyan-400 cursor-pointer"
+                />
+                <span>4. Delivered</span>
+              </label>
+            </div>
           </div>
         </div>
       </div>
