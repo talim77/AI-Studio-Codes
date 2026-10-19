@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+/* Ensure all clickable buttons and interactive controls show finger pointer cursor */
+button,
+[role="button"],
+a,
+select,
+input[type="checkbox"],
+input[type="radio"],
+input[type="submit"],
+label,
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
+/* Disabled buttons should show not-allowed */
+button:disabled,
+input:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed !important;
+}
+
+/* Smart A4 printing rules: Prevent breaking a test section across pages awkwardly */
+@media print {
+  .test-panel-print-block {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-bottom: 1.5rem !important;
+  }
+
+  .print-page-break {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+}

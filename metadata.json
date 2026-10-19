@@ -1,0 +1,8 @@
+{
+  "name": "PathoCare - Pathology & Diagnostic Lab Management",
+  "description": "Diagnostic Pathology Laboratory Information System (LIS) with dual authentication (Google Login & Staff Lab ID/PIN), role-based permissions, doctor referral records, and clinical A4 printable reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
